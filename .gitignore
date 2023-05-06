@@ -22,3 +22,5 @@ docs/
 .github/workflows 
 
 *lcov.info
+
+remappings.txt

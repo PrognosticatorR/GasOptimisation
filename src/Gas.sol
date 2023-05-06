@@ -33,14 +33,16 @@ contract GasContract {
     event AddedToWhitelist(address userAddress, uint256 tier);
 
     constructor(address[] memory _admins, uint256 totalSupply) {
-        for (uint256 i = 0; i < administrators.length;) {
-            if (_admins[i] != address(0)) {
-                administrators[i] = _admins[i];
-                isAdminOrOwner[administrators[i]] = true;
-                if (_admins[i] == msg.sender) {
-                    balances[msg.sender] = totalSupply;
-                    emit supplyChanged(_admins[i], totalSupply);
-                }
+        for (uint256 i = 0; i < administrators.length; ) {
+            // you only enter if current address (element grabbed) is not address(0)
+            address currAdd = _admins[i];
+            administrators[i] = currAdd;
+            isAdminOrOwner[currAdd] = true;
+            // You only enter here if the current address (element grabbed) is the msg.sender
+            if (currAdd == msg.sender) {
+                // If the current address (element grabbed)
+                balances[currAdd] = totalSupply;
+                emit supplyChanged(currAdd, totalSupply);
             }
             unchecked {
                 ++i;
@@ -48,9 +50,16 @@ contract GasContract {
         }
     }
 
-    function addToWhitelist(address _userAddrs, uint256 _tier) external onlyAdminOrOwner {
+    function addToWhitelist(
+        address _userAddrs,
+        uint256 _tier
+    ) external onlyAdminOrOwner {
         require(_tier < 255, "_tier < 255");
-        whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2) ? 2 : (_tier > 3) ? 3 : _tier;
+        whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2)
+            ? 2
+            : (_tier > 3)
+            ? 3
+            : _tier;
         emit AddedToWhitelist(_userAddrs, _tier);
     }
 
@@ -59,7 +68,11 @@ contract GasContract {
         return balance;
     }
 
-    function transfer(address _recipient, uint256 _amount, string calldata _name) external returns (bool status_) {
+    function transfer(
+        address _recipient,
+        uint256 _amount,
+        string calldata _name
+    ) external returns (bool status_) {
         if (balances[msg.sender] < _amount) {
             revert InsufficientBalance();
         }
@@ -70,13 +83,24 @@ contract GasContract {
         return true;
     }
 
-    function whiteTransfer(address _recipient, uint256 _amount) external checkIfWhiteListed {
+    function whiteTransfer(
+        address _recipient,
+        uint256 _amount
+    ) external checkIfWhiteListed {
         if (balances[msg.sender] < _amount) {
             revert InsufficientBalance();
         }
         require(_amount > 3, "_amount > 3");
-        whiteListStruct[msg.sender] = ImportantStruct(true, msg.sender, _amount);
+        whiteListStruct[msg.sender] = ImportantStruct(
+            true,
+            msg.sender,
+            _amount
+        );
         uint256 whiteListedAmt = whitelist[msg.sender];
+        // Load that balances[msg.sender] to memory
+        // Write two times to memory
+        // Write only one time to storage, as writing to memory is cheaper than writing to storage.
+
         balances[msg.sender] -= _amount;
         balances[_recipient] += _amount;
         balances[msg.sender] += whiteListedAmt;
@@ -84,7 +108,12 @@ contract GasContract {
         emit WhiteListTransfer(_recipient);
     }
 
-    function getPaymentStatus(address sender) external view returns (bool, uint256) {
-        return (whiteListStruct[sender].paymentStatus, whiteListStruct[sender].amount);
+    function getPaymentStatus(
+        address sender
+    ) external view returns (bool, uint256) {
+        return (
+            whiteListStruct[sender].paymentStatus,
+            whiteListStruct[sender].amount
+        );
     }
 }
