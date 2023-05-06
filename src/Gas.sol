@@ -68,21 +68,68 @@ contract GasContract {
         uint256 _amount,
         string calldata _name
     ) external returns (bool status_) {
-        if (balances[msg.sender] < _amount) {
+        uint256 senderSlot;
+        uint256 sendBalance;
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, caller())
+            mstore(add(ptr, 0x20), balances.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            senderSlot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
+            sendBalance := sload(senderSlot)
+        }
+
+        if (sendBalance < _amount) {
             revert InsufficientBalance();
         }
         require(bytes(_name).length < 9);
-        balances[msg.sender] -= _amount;
-        balances[_recipient] += _amount;
+
+        uint256 recpSlot;
+        uint256 recpBalance;
+        assembly {
+            // Update storage subtracting amount to sender.
+            sstore(senderSlot, sub(sendBalance, _amount))
+
+            // Same as above, but this time for the recipient. We will overwrite the memory as we don't need previous values anymore. In this way, we optimise the expansion.
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, _recipient)
+            mstore(add(ptr, 0x20), balances.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            recpSlot := keccak256(ptr, 0x40)
+            recpBalance := sload(recpSlot)
+            sstore(recpSlot, add(recpBalance, _amount))
+        }
         emit Transfer(_recipient, _amount);
         return true;
     }
+
+    /*     // https://www.youtube.com/watch?v=q7jBZTzNn9M&list=PL5hld-skrdFrxGUmmEbG1LBvYVyTE9M62&index=6
+    function getLocationAddressToUintMapping(
+        address add
+    ) internal view returns (uint256 ret) {
+        uint256 slot;
+        assembly {
+            slot := balances.slot
+        }
+
+        bytes32 location = keccak256(abi.encode(address(add), uint256(slot)));
+
+        assembly {
+            ret := sload(location)
+        }
+    } */
 
     function whiteTransfer(
         address _recipient,
         uint256 _amount
     ) external checkIfWhiteListed {
-        if (balances[msg.sender] < _amount) {
+        uint256 senderBal = balances[msg.sender];
+        if (senderBal < _amount) {
             revert InsufficientBalance();
         }
         require(_amount > 3);
@@ -92,14 +139,12 @@ contract GasContract {
             _amount
         );
         uint256 whiteListedAmt = whitelist[msg.sender];
-        // Load that balances[msg.sender] to memory
-        // Write two times to memory
-        // Write only one time to storage, as writing to memory is cheaper than writing to storage.
-
-        balances[msg.sender] -= _amount;
-        balances[_recipient] += _amount;
-        balances[msg.sender] += whiteListedAmt;
-        balances[_recipient] -= whiteListedAmt;
+        uint256 recpBal = balances[_recipient] + _amount;
+        senderBal -= _amount;
+        senderBal += whiteListedAmt;
+        recpBal -= whiteListedAmt;
+        balances[msg.sender] = senderBal;
+        balances[_recipient] = recpBal;
         emit WhiteListTransfer(_recipient);
     }
 
