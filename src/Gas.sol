@@ -34,20 +34,15 @@ contract GasContract {
 
     constructor(address[] memory _admins, uint256 totalSupply) {
         for (uint256 i = 0; i < administrators.length; ) {
-            // you only enter if current address (element grabbed) is not address(0)
             address currAdd = _admins[i];
             administrators[i] = currAdd;
             isAdminOrOwner[currAdd] = true;
-            // You only enter here if the current address (element grabbed) is the msg.sender
-            if (currAdd == msg.sender) {
-                // If the current address (element grabbed)
-                balances[currAdd] = totalSupply;
-                emit supplyChanged(currAdd, totalSupply);
-            }
             unchecked {
                 ++i;
             }
         }
+        balances[msg.sender] = totalSupply;
+        emit supplyChanged(msg.sender, totalSupply);
     }
 
     function addToWhitelist(
