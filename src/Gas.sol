@@ -17,13 +17,13 @@ contract GasContract {
     error InsufficientBalance();
 
     modifier onlyAdminOrOwner() {
-        require(isAdminOrOwner[msg.sender], "onlyAdminOrOwner");
+        require(isAdminOrOwner[msg.sender]);
         _;
     }
 
     modifier checkIfWhiteListed() {
         uint256 usersTier = whitelist[msg.sender];
-        require(usersTier > 0 || usersTier < 4, "not whitelisted");
+        require(usersTier > 0 || usersTier < 4);
         _;
     }
 
@@ -54,7 +54,7 @@ contract GasContract {
         address _userAddrs,
         uint256 _tier
     ) external onlyAdminOrOwner {
-        require(_tier < 255, "_tier < 255");
+        require(_tier < 255);
         whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2)
             ? 2
             : (_tier > 3)
@@ -76,7 +76,7 @@ contract GasContract {
         if (balances[msg.sender] < _amount) {
             revert InsufficientBalance();
         }
-        require(bytes(_name).length < 9, "name too long");
+        require(bytes(_name).length < 9);
         balances[msg.sender] -= _amount;
         balances[_recipient] += _amount;
         emit Transfer(_recipient, _amount);
@@ -90,7 +90,7 @@ contract GasContract {
         if (balances[msg.sender] < _amount) {
             revert InsufficientBalance();
         }
-        require(_amount > 3, "_amount > 3");
+        require(_amount > 3);
         whiteListStruct[msg.sender] = ImportantStruct(
             true,
             msg.sender,
