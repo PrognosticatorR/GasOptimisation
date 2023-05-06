@@ -98,7 +98,6 @@ contract GasContract {
             let ptr := mload(0x40)
             // Allocate in memory | add, balances.slot |
             mstore(ptr, _recipient)
-            mstore(add(ptr, 0x20), balances.slot)
             // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
             recpSlot := keccak256(ptr, 0x40)
             recpBalance := sload(recpSlot)
@@ -108,28 +107,25 @@ contract GasContract {
         return true;
     }
 
-    /*     // https://www.youtube.com/watch?v=q7jBZTzNn9M&list=PL5hld-skrdFrxGUmmEbG1LBvYVyTE9M62&index=6
-    function getLocationAddressToUintMapping(
-        address add
-    ) internal view returns (uint256 ret) {
-        uint256 slot;
-        assembly {
-            slot := balances.slot
-        }
-
-        bytes32 location = keccak256(abi.encode(address(add), uint256(slot)));
-
-        assembly {
-            ret := sload(location)
-        }
-    } */
-
     function whiteTransfer(
         address _recipient,
         uint256 _amount
     ) external checkIfWhiteListed {
-        uint256 senderBal = balances[msg.sender];
-        if (senderBal < _amount) {
+        uint256 senderSlot;
+        uint256 sendBalance;
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, caller())
+            mstore(add(ptr, 0x20), balances.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            senderSlot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
+            sendBalance := sload(senderSlot)
+        }
+
+        if (sendBalance < _amount) {
             revert InsufficientBalance();
         }
         require(_amount > 3);
@@ -138,13 +134,25 @@ contract GasContract {
             msg.sender,
             _amount
         );
+
         uint256 whiteListedAmt = whitelist[msg.sender];
-        uint256 recpBal = balances[_recipient] + _amount;
-        senderBal -= _amount;
-        senderBal += whiteListedAmt;
-        recpBal -= whiteListedAmt;
-        balances[msg.sender] = senderBal;
-        balances[_recipient] = recpBal;
+        uint256 recpSlot;
+        uint256 recpBalance;
+        assembly {
+            // Update storage subtracting amount to sender and adding whiteListedAmt.
+            sstore(senderSlot, add(sub(sendBalance, _amount), whiteListedAmt))
+
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, _recipient)
+            // Calculate storage slot hashing our memory with keccak256(). We are hashing 64B.
+            recpSlot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the current balance for that address (recipient).
+            recpBalance := sload(recpSlot)
+            // Update storage adding amount to recipient and subtracting whiteListedAmt.
+            sstore(recpSlot, sub(add(recpBalance, _amount), whiteListedAmt))
+        }
         emit WhiteListTransfer(_recipient);
     }
 
