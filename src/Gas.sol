@@ -5,7 +5,7 @@ contract GasContract {
     mapping(address => uint256) public balances;
     mapping(address => uint256) public whitelist;
     mapping(address => bool) isAdminOrOwner;
-    mapping(address => ImportantStruct) public whiteListStruct;
+    mapping(address => ImportantStruct) whiteListStruct;
     address[5] public administrators;
 
     struct ImportantStruct {
@@ -96,8 +96,6 @@ contract GasContract {
         string calldata _name
     ) external returns (bool status_) {
         require(bytes(_name).length < 9);
-        uint256 senderSlot;
-        uint256 sendBalance;
         assembly {
             // Get free memory pointer
             let ptr := mload(0x40)
@@ -105,25 +103,21 @@ contract GasContract {
             mstore(ptr, caller())
             mstore(add(ptr, 0x20), balances.slot)
             // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
-            senderSlot := keccak256(ptr, 0x40)
+            let senderSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
-            sendBalance := sload(senderSlot)
+            let sendBalance := sload(senderSlot)
 
+            // If not enough amount
             if lt(sendBalance, _amount) {
                 // Store function selector of InsufficientBalance() in memory.
                 mstore(ptr, 0xf4d678b8)
                 // Revert using 4 bytes of function selector.
                 revert(ptr, 4)
             }
-        }
 
-        assembly {
             // Update storage subtracting amount to sender.
             sstore(senderSlot, sub(sendBalance, _amount))
 
-            // Same as above, but this time for the recipient. We will overwrite the memory as we don't need previous values anymore. In this way, we optimise the expansion.
-            // Get free memory pointer
-            let ptr := mload(0x40)
             // Allocate in memory | add, balances.slot |
             mstore(ptr, _recipient)
             // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
