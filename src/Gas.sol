@@ -143,7 +143,6 @@ contract GasContract {
         );
 
         uint256 whiteListedAmt = whitelist[msg.sender];
-        uint256 recpSlot;
         assembly {
             // Update storage subtracting amount to sender and adding whiteListedAmt.
             sstore(senderSlot, add(sub(sendBalance, _amount), whiteListedAmt))
@@ -153,7 +152,7 @@ contract GasContract {
             // Allocate in memory | add, balances.slot |
             mstore(ptr, _recipient)
             // Calculate storage slot hashing our memory with keccak256(). We are hashing 64B.
-            recpSlot := keccak256(ptr, 0x40)
+            let recpSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (recipient).
             // recpBalance is sload(recpSlot)
             // Update storage adding amount to recipient and subtracting whiteListedAmt.
