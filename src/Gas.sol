@@ -95,7 +95,6 @@ contract GasContract {
         require(bytes(_name).length < 9);
 
         uint256 recpSlot;
-        uint256 recpBalance;
         assembly {
             // Update storage subtracting amount to sender.
             sstore(senderSlot, sub(sendBalance, _amount))
@@ -107,8 +106,8 @@ contract GasContract {
             mstore(ptr, _recipient)
             // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
             recpSlot := keccak256(ptr, 0x40)
-            recpBalance := sload(recpSlot)
-            sstore(recpSlot, add(recpBalance, _amount))
+            // recpBalance is sload(recpSlot)
+            sstore(recpSlot, add(sload(recpSlot), _amount))
         }
         emit Transfer(_recipient, _amount);
         return true;
@@ -151,7 +150,6 @@ contract GasContract {
 
         uint256 whiteListedAmt = whitelist[msg.sender];
         uint256 recpSlot;
-        uint256 recpBalance;
         assembly {
             // Update storage subtracting amount to sender and adding whiteListedAmt.
             sstore(senderSlot, add(sub(sendBalance, _amount), whiteListedAmt))
@@ -163,9 +161,9 @@ contract GasContract {
             // Calculate storage slot hashing our memory with keccak256(). We are hashing 64B.
             recpSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (recipient).
-            recpBalance := sload(recpSlot)
+            // recpBalance is sload(recpSlot)
             // Update storage adding amount to recipient and subtracting whiteListedAmt.
-            sstore(recpSlot, sub(add(recpBalance, _amount), whiteListedAmt))
+            sstore(recpSlot, sub(add(sload(recpSlot), _amount), whiteListedAmt))
         }
         emit WhiteListTransfer(_recipient);
     }
