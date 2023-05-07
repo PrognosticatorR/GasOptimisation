@@ -83,10 +83,7 @@ contract GasContract {
 
             if lt(sendBalance, _amount) {
                 // Store function selector of InsufficientBalance() in memory.
-                mstore(
-                    ptr,
-                    0xf4d678b800000000000000000000000000000000000000000000000000000000
-                )
+                mstore(ptr, 0xf4d678b8)
                 // Revert using 4 bytes of function selector.
                 revert(ptr, 4)
             }
@@ -132,10 +129,7 @@ contract GasContract {
 
             if lt(sendBalance, _amount) {
                 // Store function selector of InsufficientBalance() in memory.
-                mstore(
-                    ptr,
-                    0xf4d678b800000000000000000000000000000000000000000000000000000000
-                )
+                mstore(ptr, 0xf4d678b80)
                 // Revert using 4 bytes of function selector.
                 revert(ptr, 4)
             }
