@@ -77,11 +77,24 @@ contract GasContract {
         uint256 _tier
     ) external onlyAdminOrOwner {
         require(_tier < 255);
-        whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2)
-            ? 2
-            : (_tier > 3)
-            ? 3
-            : _tier;
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, whitelist.slot |
+            mstore(ptr, _userAddrs)
+            mstore(add(ptr, 0x20), whitelist.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            let slot := keccak256(ptr, 0x40)
+
+            // if _tier greater than 3, store 3. Else, store _tier.
+            switch gt(_tier, 3)
+            case true {
+                sstore(slot, 3)
+            }
+            default {
+                sstore(slot, _tier)
+            }
+        }
         emit AddedToWhitelist(_userAddrs, _tier);
     }
 
