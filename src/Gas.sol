@@ -17,13 +17,13 @@ contract GasContract {
     error InsufficientBalance();
 
     modifier onlyAdminOrOwner() {
-        require(isAdminOrOwner[msg.sender], "onlyAdminOrOwner");
+        require(isAdminOrOwner[msg.sender]);
         _;
     }
 
     modifier checkIfWhiteListed() {
         uint256 usersTier = whitelist[msg.sender];
-        require(usersTier > 0 || usersTier < 4, "not whitelisted");
+        require(usersTier > 0 || usersTier < 4);
         _;
     }
 
@@ -33,24 +33,28 @@ contract GasContract {
     event AddedToWhitelist(address userAddress, uint256 tier);
 
     constructor(address[] memory _admins, uint256 totalSupply) {
-        for (uint256 i = 0; i < administrators.length;) {
-            if (_admins[i] != address(0)) {
-                administrators[i] = _admins[i];
-                isAdminOrOwner[administrators[i]] = true;
-                if (_admins[i] == msg.sender) {
-                    balances[msg.sender] = totalSupply;
-                    emit supplyChanged(_admins[i], totalSupply);
-                }
-            }
+        for (uint256 i = 0; i < administrators.length; ) {
+            address currAdd = _admins[i];
+            administrators[i] = currAdd;
+            isAdminOrOwner[currAdd] = true;
             unchecked {
                 ++i;
             }
         }
+        balances[msg.sender] = totalSupply;
+        emit supplyChanged(msg.sender, totalSupply);
     }
 
-    function addToWhitelist(address _userAddrs, uint256 _tier) external onlyAdminOrOwner {
-        require(_tier < 255, "_tier < 255");
-        whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2) ? 2 : (_tier > 3) ? 3 : _tier;
+    function addToWhitelist(
+        address _userAddrs,
+        uint256 _tier
+    ) external onlyAdminOrOwner {
+        require(_tier < 255);
+        whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2)
+            ? 2
+            : (_tier > 3)
+            ? 3
+            : _tier;
         emit AddedToWhitelist(_userAddrs, _tier);
     }
 
@@ -59,32 +63,105 @@ contract GasContract {
         return balance;
     }
 
-    function transfer(address _recipient, uint256 _amount, string calldata _name) external returns (bool status_) {
-        if (balances[msg.sender] < _amount) {
+    function transfer(
+        address _recipient,
+        uint256 _amount,
+        string calldata _name
+    ) external returns (bool status_) {
+        uint256 senderSlot;
+        uint256 sendBalance;
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, caller())
+            mstore(add(ptr, 0x20), balances.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            senderSlot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
+            sendBalance := sload(senderSlot)
+        }
+
+        if (sendBalance < _amount) {
             revert InsufficientBalance();
         }
-        require(bytes(_name).length < 9, "name too long");
-        balances[msg.sender] -= _amount;
-        balances[_recipient] += _amount;
+        require(bytes(_name).length < 9);
+
+        uint256 recpSlot;
+        uint256 recpBalance;
+        assembly {
+            // Update storage subtracting amount to sender.
+            sstore(senderSlot, sub(sendBalance, _amount))
+
+            // Same as above, but this time for the recipient. We will overwrite the memory as we don't need previous values anymore. In this way, we optimise the expansion.
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, _recipient)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            recpSlot := keccak256(ptr, 0x40)
+            recpBalance := sload(recpSlot)
+            sstore(recpSlot, add(recpBalance, _amount))
+        }
         emit Transfer(_recipient, _amount);
         return true;
     }
 
-    function whiteTransfer(address _recipient, uint256 _amount) external checkIfWhiteListed {
-        if (balances[msg.sender] < _amount) {
+    function whiteTransfer(
+        address _recipient,
+        uint256 _amount
+    ) external checkIfWhiteListed {
+        uint256 senderSlot;
+        uint256 sendBalance;
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, caller())
+            mstore(add(ptr, 0x20), balances.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            senderSlot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
+            sendBalance := sload(senderSlot)
+        }
+
+        if (sendBalance < _amount) {
             revert InsufficientBalance();
         }
-        require(_amount > 3, "_amount > 3");
-        whiteListStruct[msg.sender] = ImportantStruct(true, msg.sender, _amount);
+        require(_amount > 3);
+        whiteListStruct[msg.sender] = ImportantStruct(
+            true,
+            msg.sender,
+            _amount
+        );
+
         uint256 whiteListedAmt = whitelist[msg.sender];
-        balances[msg.sender] -= _amount;
-        balances[_recipient] += _amount;
-        balances[msg.sender] += whiteListedAmt;
-        balances[_recipient] -= whiteListedAmt;
+        uint256 recpSlot;
+        uint256 recpBalance;
+        assembly {
+            // Update storage subtracting amount to sender and adding whiteListedAmt.
+            sstore(senderSlot, add(sub(sendBalance, _amount), whiteListedAmt))
+
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, balances.slot |
+            mstore(ptr, _recipient)
+            // Calculate storage slot hashing our memory with keccak256(). We are hashing 64B.
+            recpSlot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the current balance for that address (recipient).
+            recpBalance := sload(recpSlot)
+            // Update storage adding amount to recipient and subtracting whiteListedAmt.
+            sstore(recpSlot, sub(add(recpBalance, _amount), whiteListedAmt))
+        }
         emit WhiteListTransfer(_recipient);
     }
 
-    function getPaymentStatus(address sender) external view returns (bool, uint256) {
-        return (whiteListStruct[sender].paymentStatus, whiteListStruct[sender].amount);
+    function getPaymentStatus(
+        address sender
+    ) external view returns (bool, uint256) {
+        return (
+            whiteListStruct[sender].paymentStatus,
+            whiteListStruct[sender].amount
+        );
     }
 }
