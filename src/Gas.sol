@@ -80,11 +80,18 @@ contract GasContract {
             senderSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
             sendBalance := sload(senderSlot)
+
+            if lt(sendBalance, _amount) {
+                // Store function selector of InsufficientBalance() in memory.
+                mstore(
+                    ptr,
+                    0xf4d678b800000000000000000000000000000000000000000000000000000000
+                )
+                // Revert using 4 bytes of function selector.
+                revert(ptr, 4)
+            }
         }
 
-        if (sendBalance < _amount) {
-            revert InsufficientBalance();
-        }
         require(bytes(_name).length < 9);
 
         uint256 recpSlot;
@@ -123,11 +130,18 @@ contract GasContract {
             senderSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
             sendBalance := sload(senderSlot)
+
+            if lt(sendBalance, _amount) {
+                // Store function selector of InsufficientBalance() in memory.
+                mstore(
+                    ptr,
+                    0xf4d678b800000000000000000000000000000000000000000000000000000000
+                )
+                // Revert using 4 bytes of function selector.
+                revert(ptr, 4)
+            }
         }
 
-        if (sendBalance < _amount) {
-            revert InsufficientBalance();
-        }
         require(_amount > 3);
         whiteListStruct[msg.sender] = ImportantStruct(
             true,
