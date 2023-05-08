@@ -54,22 +54,31 @@ contract GasContract {
         _;
     }
 
-    event supplyChanged(address indexed, uint256 indexed);
-    event Transfer(address recipient, uint256 amount);
     event WhiteListTransfer(address indexed);
     event AddedToWhitelist(address userAddress, uint256 tier);
 
-    constructor(address[] memory _admins, uint256 totalSupply) {
-        for (uint256 i = 0; i < administrators.length; ) {
-            address currAdd = _admins[i];
-            administrators[i] = currAdd;
-            isAdminOrOwner[currAdd] = true;
-            unchecked {
-                ++i;
-            }
-        }
+    constructor(address[5] memory _admins, uint256 totalSupply) {
+        address currAdd = _admins[0];
+        administrators[0] = currAdd;
+        isAdminOrOwner[currAdd] = true;
+
+        currAdd = _admins[1];
+        administrators[1] = currAdd;
+        isAdminOrOwner[currAdd] = true;
+
+        currAdd = _admins[2];
+        administrators[2] = currAdd;
+        isAdminOrOwner[currAdd] = true;
+
+        currAdd = _admins[3];
+        administrators[3] = currAdd;
+        isAdminOrOwner[currAdd] = true;
+
+        currAdd = _admins[4];
+        administrators[4] = currAdd;
+        isAdminOrOwner[currAdd] = true;
+
         balances[msg.sender] = totalSupply;
-        emit supplyChanged(msg.sender, totalSupply);
     }
 
     function addToWhitelist(
@@ -138,7 +147,6 @@ contract GasContract {
             // recpBalance is sload(recpSlot)
             sstore(recpSlot, add(sload(recpSlot), _amount))
         }
-        emit Transfer(_recipient, _amount);
         return true;
     }
 
