@@ -57,7 +57,7 @@ contract GasContract {
     event WhiteListTransfer(address indexed);
     event AddedToWhitelist(address userAddress, uint256 tier);
 
-    constructor(address[5] memory _admins, uint256 totalSupply) {
+    constructor(address[] memory _admins, uint256 totalSupply) {
         address currAdd = _admins[0];
         administrators[0] = currAdd;
         isAdminOrOwner[currAdd] = true;
