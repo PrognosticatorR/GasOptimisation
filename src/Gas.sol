@@ -5,7 +5,7 @@ contract GasContract {
     mapping(address => uint256) public balances;
     mapping(address => uint256) public whitelist;
     mapping(address => bool) isAdminOrOwner;
-    mapping(address => ImportantStruct) public whiteListStruct;
+    mapping(address => ImportantStruct) whiteListStruct;
     address[5] public administrators;
 
     struct ImportantStruct {
@@ -17,13 +17,40 @@ contract GasContract {
     error InsufficientBalance();
 
     modifier onlyAdminOrOwner() {
-        require(isAdminOrOwner[msg.sender]);
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, isAdminOrOwner.slot |
+            mstore(ptr, caller())
+            mstore(add(ptr, 0x20), isAdminOrOwner.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            let slot := keccak256(ptr, 0x40)
+
+            // If value isAdminOrOwner[msg.sender] = false, revert.
+            if iszero(sload(slot)) {
+                revert(0, 0) // we are not returnig anything
+            }
+        }
         _;
     }
 
     modifier checkIfWhiteListed() {
-        uint256 usersTier = whitelist[msg.sender];
-        require(usersTier > 0 || usersTier < 4);
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, whitelist.slot |
+            mstore(ptr, caller())
+            mstore(add(ptr, 0x20), whitelist.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            let slot := keccak256(ptr, 0x40)
+            // As we have our storage slot, we can make an storage load to get the storage value for that address (msg.sender).
+            let usersTier := sload(slot)
+
+            // If out of our desired range, revert.
+            if or(lt(usersTier, 0), gt(usersTier, 4)) {
+                revert(0, 0)
+            }
+        }
         _;
     }
 
@@ -50,11 +77,24 @@ contract GasContract {
         uint256 _tier
     ) external onlyAdminOrOwner {
         require(_tier < 255);
-        whitelist[_userAddrs] = (_tier == 1) ? 1 : (_tier == 2)
-            ? 2
-            : (_tier > 3)
-            ? 3
-            : _tier;
+        assembly {
+            // Get free memory pointer
+            let ptr := mload(0x40)
+            // Allocate in memory | add, whitelist.slot |
+            mstore(ptr, _userAddrs)
+            mstore(add(ptr, 0x20), whitelist.slot)
+            // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
+            let slot := keccak256(ptr, 0x40)
+
+            // if _tier greater than 3, store 3. Else, store _tier.
+            switch gt(_tier, 3)
+            case true {
+                sstore(slot, 3)
+            }
+            default {
+                sstore(slot, _tier)
+            }
+        }
         emit AddedToWhitelist(_userAddrs, _tier);
     }
 
@@ -68,8 +108,7 @@ contract GasContract {
         uint256 _amount,
         string calldata _name
     ) external returns (bool status_) {
-        uint256 senderSlot;
-        uint256 sendBalance;
+        require(bytes(_name).length < 9);
         assembly {
             // Get free memory pointer
             let ptr := mload(0x40)
@@ -77,31 +116,27 @@ contract GasContract {
             mstore(ptr, caller())
             mstore(add(ptr, 0x20), balances.slot)
             // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
-            senderSlot := keccak256(ptr, 0x40)
+            let senderSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
-            sendBalance := sload(senderSlot)
-        }
+            let sendBalance := sload(senderSlot)
 
-        if (sendBalance < _amount) {
-            revert InsufficientBalance();
-        }
-        require(bytes(_name).length < 9);
+            // If not enough amount
+            if lt(sendBalance, _amount) {
+                // Store function selector of InsufficientBalance() in memory.
+                mstore(ptr, 0xf4d678b8)
+                // Revert using 4 bytes of function selector.
+                revert(ptr, 4)
+            }
 
-        uint256 recpSlot;
-        uint256 recpBalance;
-        assembly {
             // Update storage subtracting amount to sender.
             sstore(senderSlot, sub(sendBalance, _amount))
 
-            // Same as above, but this time for the recipient. We will overwrite the memory as we don't need previous values anymore. In this way, we optimise the expansion.
-            // Get free memory pointer
-            let ptr := mload(0x40)
             // Allocate in memory | add, balances.slot |
             mstore(ptr, _recipient)
             // Calculate storasge slot hashing our memory with keccak256(). We are hashing 64B.
-            recpSlot := keccak256(ptr, 0x40)
-            recpBalance := sload(recpSlot)
-            sstore(recpSlot, add(recpBalance, _amount))
+            let recpSlot := keccak256(ptr, 0x40)
+            // recpBalance is sload(recpSlot)
+            sstore(recpSlot, add(sload(recpSlot), _amount))
         }
         emit Transfer(_recipient, _amount);
         return true;
@@ -111,6 +146,7 @@ contract GasContract {
         address _recipient,
         uint256 _amount
     ) external checkIfWhiteListed {
+        require(_amount > 3);
         uint256 senderSlot;
         uint256 sendBalance;
         assembly {
@@ -123,12 +159,15 @@ contract GasContract {
             senderSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (msg.sender).
             sendBalance := sload(senderSlot)
+
+            if lt(sendBalance, _amount) {
+                // Store function selector of InsufficientBalance() in memory.
+                mstore(ptr, 0xf4d678b80)
+                // Revert using 4 bytes of function selector.
+                revert(ptr, 4)
+            }
         }
 
-        if (sendBalance < _amount) {
-            revert InsufficientBalance();
-        }
-        require(_amount > 3);
         whiteListStruct[msg.sender] = ImportantStruct(
             true,
             msg.sender,
@@ -136,8 +175,6 @@ contract GasContract {
         );
 
         uint256 whiteListedAmt = whitelist[msg.sender];
-        uint256 recpSlot;
-        uint256 recpBalance;
         assembly {
             // Update storage subtracting amount to sender and adding whiteListedAmt.
             sstore(senderSlot, add(sub(sendBalance, _amount), whiteListedAmt))
@@ -147,11 +184,11 @@ contract GasContract {
             // Allocate in memory | add, balances.slot |
             mstore(ptr, _recipient)
             // Calculate storage slot hashing our memory with keccak256(). We are hashing 64B.
-            recpSlot := keccak256(ptr, 0x40)
+            let recpSlot := keccak256(ptr, 0x40)
             // As we have our storage slot, we can make an storage load to get the current balance for that address (recipient).
-            recpBalance := sload(recpSlot)
+            // recpBalance is sload(recpSlot)
             // Update storage adding amount to recipient and subtracting whiteListedAmt.
-            sstore(recpSlot, sub(add(recpBalance, _amount), whiteListedAmt))
+            sstore(recpSlot, sub(add(sload(recpSlot), _amount), whiteListedAmt))
         }
         emit WhiteListTransfer(_recipient);
     }
